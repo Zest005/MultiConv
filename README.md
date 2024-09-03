@@ -1,4 +1,3 @@
-# MultiConv
 MultiConv is a simple Windows Forms application for converting image, video and audio files between different formats.
 It supports both image, video and audio formats, allowing users to easily convert files.
 # Main Functions
