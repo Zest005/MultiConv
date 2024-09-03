@@ -8,3 +8,10 @@ Simple and easy-to-use interface: Allows you to easily select files to convert a
 # Installation
 1. Open "Releases" and choose the latest version.
 2. Download .exe file (setup file).
+# Usage
+1. Launch the MyConverter.exe application.
+2. Select the file type (photo, video or audio) using the corresponding radio buttons.
+3. Select the source and target file format from the drop-down lists.
+4. Click the Select File button to select the source file.
+5. Click the Convert button to start the conversion process.
+6. Wait for the process to complete and receive a completion message.
