@@ -8,6 +8,10 @@ namespace MyConverter
     {
         string selectedRadioButton = "";
 
+        private CancellationTokenSource cancellationTokenSource;
+        private bool isConverting = false;
+        private string outputFileName;
+
         public Form1()
         {
             InitializeComponent();
@@ -23,6 +27,8 @@ namespace MyConverter
             radioButton1.CheckedChanged += radioButton1_CheckedChanged;
             radioButton2.CheckedChanged += radioButton2_CheckedChanged;
             radioButton3.CheckedChanged += radioButton3_CheckedChanged;
+
+            this.FormClosing += Form1_FormClosing;
         }
 
         private void UpdateConvertButtonState()
@@ -146,7 +152,7 @@ namespace MyConverter
 
                 selectedOriginalFormat = comboBox1.SelectedItem.ToString();
 
-                openFileDialog.Filter = $"{selectedOriginalFormat} files (*.{selectedOriginalFormat.ToLower()})|*.{selectedOriginalFormat.ToLower()}";
+                openFileDialog.Filter = $"{selectedOriginalFormat} files (*.{selectedOriginalFormat?.ToLower()})|*.{selectedOriginalFormat?.ToLower()}";
                 openFileDialog.Title = $"Choose file in a {selectedOriginalFormat} format";
 
                 if (openFileDialog.ShowDialog() == DialogResult.OK)
@@ -169,11 +175,9 @@ namespace MyConverter
             var directory = AppContext.BaseDirectory;
             return Path.GetFullPath(Path.Combine(directory, "ffmpeg", "bin"));
         }
-
         private async void button2_Click(object sender, EventArgs e)
         {
             string ffmpegPath = GetRootPath();
-
             FFmpeg.SetExecutablesPath(ffmpegPath);
 
             using (SaveFileDialog saveFileDialog = new SaveFileDialog())
@@ -186,15 +190,24 @@ namespace MyConverter
                 {
                     try
                     {
-                        string outputFileName = saveFileDialog.FileName;
+                        outputFileName = saveFileDialog.FileName;
                         string inputFileName = textBox1.Text;
+
+                        cancellationTokenSource = new CancellationTokenSource();
+                        isConverting = true;
+
+                        progressBar1.Style = ProgressBarStyle.Marquee;
+                        progressBar1.Visible = true;
+                        Cursor = Cursors.AppStarting;
 
                         if (radioButton2.Checked || radioButton3.Checked) // Video or Audio
                         {
                             IMediaInfo mediaInfo = await FFmpeg.GetMediaInfo(inputFileName);
-                            IConversion conversion = FFmpeg.Conversions.New()
+                            var conversion = FFmpeg.Conversions.New()
                                 .AddStream(mediaInfo.Streams)
-                                .SetOutput(outputFileName);
+                                .SetOutput(outputFileName)
+                                .UseMultiThread(true)
+                                .SetOverwriteOutput(true);
 
                             switch (selectedConvertFormat)
                             {
@@ -218,18 +231,9 @@ namespace MyConverter
                                     return;
                             }
 
-                            progressBar1.Style = ProgressBarStyle.Marquee;
-                            progressBar1.Visible = true;
-
-                            Cursor = Cursors.AppStarting;
-
-                            await Task.Run(() => conversion.Start());
-
-                            progressBar1.Visible = false;
-
-                            Cursor = Cursors.Default;
-
-                            MessageBox.Show($"File succesfully converted to {selectedConvertFormat}");
+                            button3.Enabled = true;
+                            await conversion.Start(cancellationTokenSource.Token);
+                            MessageBox.Show($"File successfully converted to {selectedConvertFormat}");
                         }
                         else if (radioButton1.Checked)
                         {
@@ -260,20 +264,19 @@ namespace MyConverter
                                         return;
                                 }
 
-                                progressBar1.Style = ProgressBarStyle.Marquee;
-                                progressBar1.Visible = true;
-
-                                Cursor = Cursors.AppStarting;
-
                                 await Task.Run(() => image.Write(outputFileName));
 
                                 progressBar1.Visible = false;
-
                                 Cursor = Cursors.Default;
-
-                                MessageBox.Show($"File succesfully converted to {selectedConvertFormat}");
+                                MessageBox.Show($"File successfully converted to {selectedConvertFormat}");
                             }
                         }
+
+                        isConverting = false;
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        MessageBox.Show("Conversion was canceled.");
                     }
                     catch (Exception ex)
                     {
@@ -282,6 +285,34 @@ namespace MyConverter
                     finally
                     {
                         progressBar1.Visible = false;
+                        Cursor = Cursors.Default;
+                        isConverting = false;
+
+                        bool fileDeleted = false;
+                        int retryCount = 5;
+
+                        while (retryCount > 0 && !fileDeleted)
+                        {
+                            try
+                            {
+                                if (File.Exists(outputFileName))
+                                {
+                                    File.Delete(outputFileName);
+                                    fileDeleted = true;
+                                }
+                            }
+                            catch (IOException)
+                            {
+                                await Task.Delay(500);
+                            }
+
+                            retryCount--;
+                        }
+
+                        if (!fileDeleted)
+                        {
+                            MessageBox.Show("Failed to delete a temporary file.");
+                        }
                     }
                 }
             }
@@ -320,6 +351,73 @@ namespace MyConverter
             catch (Exception ex)
             {
                 MessageBox.Show("This link can't be opened: " + ex.Message);
+            }
+        }
+
+        private async Task ConversionCancellingAsync()
+        {
+            if (isConverting)
+            {
+                var result = MessageBox.Show("Conversion in progress. Do you want to stop?", "Conversion in progress",
+                    MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+
+                if (result == DialogResult.Yes)
+                {
+                    cancellationTokenSource.Cancel();
+
+                    while (isConverting)
+                    {
+                        await Task.Delay(500);
+                    }
+
+                    bool fileDeleted = false;
+                    int retryCount = 5;
+
+                    while (retryCount > 0 && !fileDeleted)
+                    {
+                        try
+                        {
+                            if (File.Exists(outputFileName))
+                            {
+                                File.Delete(outputFileName);
+                                fileDeleted = true;
+                            }
+                        }
+                        catch (IOException)
+                        {
+                            await Task.Delay(500);
+                        }
+
+                        retryCount--;
+                    }
+
+                    isConverting = false;
+                }
+            }
+        }
+
+        private async void Form1_FormClosing(object sender, FormClosingEventArgs e)
+        {
+            if (isConverting)
+            {
+                e.Cancel = true;
+
+                await ConversionCancellingAsync();
+
+                if (!isConverting)
+                {
+                    this.Close();
+                }
+            }
+        }
+
+        private async void button3_Click(object sender, EventArgs e)
+        {
+            await ConversionCancellingAsync();
+            
+            if (!isConverting)
+            {
+                button3.Enabled = false;
             }
         }
     }

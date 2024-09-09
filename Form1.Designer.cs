@@ -50,6 +50,7 @@
             label4 = new Label();
             linkLabel2 = new LinkLabel();
             label5 = new Label();
+            button3 = new Button();
             panel1.SuspendLayout();
             panel2.SuspendLayout();
             panel3.SuspendLayout();
@@ -194,6 +195,7 @@
             // 
             // panel3
             // 
+            panel3.Controls.Add(button3);
             panel3.Controls.Add(progressBar1);
             panel3.Controls.Add(button2);
             panel3.Location = new Point(12, 314);
@@ -264,6 +266,17 @@
             label5.TabIndex = 19;
             label5.Text = "version 0.1";
             // 
+            // button3
+            // 
+            button3.Enabled = false;
+            button3.Location = new Point(268, 28);
+            button3.Name = "button3";
+            button3.Size = new Size(75, 23);
+            button3.TabIndex = 15;
+            button3.Text = "Cancel";
+            button3.UseVisualStyleBackColor = true;
+            button3.Click += button3_Click;
+            // 
             // Form1
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
@@ -316,5 +329,6 @@
         private Label label4;
         private LinkLabel linkLabel2;
         private Label label5;
+        private Button button3;
     }
 }
