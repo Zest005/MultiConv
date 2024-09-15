@@ -245,7 +245,7 @@
             label5.Name = "label5";
             label5.Size = new Size(72, 15);
             label5.TabIndex = 19;
-            label5.Text = "version 0.0.2";
+            label5.Text = "version 0.0.3";
             // 
             // label7
             // 

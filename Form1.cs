@@ -1,6 +1,5 @@
 using ImageMagick;
 using System.Diagnostics;
-using System.Drawing.Text;
 using Xabe.FFmpeg;
 
 namespace MyConverter
@@ -8,14 +7,12 @@ namespace MyConverter
     public partial class Form1 : Form
     {
         string selectedRadioButton = "";
-
         private CancellationTokenSource cancellationTokenSource;
         private bool isConverting = false;
         private string outputFileName;
-
-        private bool cancelBtn = false;
-
+        private bool isCancelButtonClicked = false;
         private object tempItem;
+        private bool isFormClosing = false;
 
         public Form1()
         {
@@ -36,7 +33,7 @@ namespace MyConverter
             this.FormClosing += Form1_FormClosing;
         }
 
-        private void UpdateConvertButtonState()
+        private void ToggleConvertButtonState()
         {
             if (label7 != null)
             {
@@ -48,7 +45,7 @@ namespace MyConverter
             }
         }
 
-        private void UpdateChooseButtonState()
+        private void ToggleChooseButtonState()
         {
             if (comboBox1.SelectedIndex != -1 && comboBox2.SelectedIndex != -1)
             {
@@ -66,7 +63,7 @@ namespace MyConverter
             comboBox2.Items.AddRange(new string[] { "Empty" });
         }
 
-        private void radioButton1_CheckedChanged(object sender, EventArgs e)
+        private void InitializeFileTypeComboBox(string[] comboBox1Items, string[] comboBox2Items, string radioButtonType)
         {
             panel4.AllowDrop = false;
             label7.Text = null;
@@ -74,53 +71,42 @@ namespace MyConverter
 
             comboBox1.SelectedIndex = -1;
             comboBox2.SelectedIndex = -1;
-            UpdateChooseButtonState();
+            ToggleChooseButtonState();
 
-            selectedRadioButton = "Photo";
+            selectedRadioButton = radioButtonType;
 
             comboBox1.Items.Clear();
-            comboBox1.Items.AddRange(new string[] { "JPG", "PNG", "JPEG", "BMP", "GIF", "WEBP", "HEIC" });
+            comboBox1.Items.AddRange(comboBox1Items);
 
             comboBox2.Items.Clear();
-            comboBox2.Items.AddRange(new string[] { "JPG", "PNG", "JPEG", "BMP", "GIF", "WEBP" });
+            comboBox2.Items.AddRange(comboBox2Items);
+        }
+
+        private void radioButton1_CheckedChanged(object sender, EventArgs e)
+        {
+            InitializeFileTypeComboBox(
+                new string[] { "JPG", "PNG", "JPEG", "BMP", "GIF", "WEBP", "HEIC" },
+                new string[] { "JPG", "PNG", "JPEG", "BMP", "GIF", "WEBP"},
+                "Photo"
+                );
         }
 
         private void radioButton2_CheckedChanged(object sender, EventArgs e)
         {
-            panel4.AllowDrop = false;
-            label7.Text = null;
-            label6.Visible = false;
-
-            comboBox1.SelectedIndex = -1;
-            comboBox2.SelectedIndex = -1;
-            UpdateChooseButtonState();
-
-            selectedRadioButton = "Video";
-
-            comboBox1.Items.Clear();
-            comboBox1.Items.AddRange(new string[] { "MP4", "AVI", "WEBM" });
-
-            comboBox2.Items.Clear();
-            comboBox2.Items.AddRange(new string[] { "MP4", "AVI", "WEBM" });
+            InitializeFileTypeComboBox(
+                new string[] { "MP4", "AVI", "WEBM", "WMV" },
+                new string[] { "MP4", "AVI", "WEBM", "WMV" },
+                "Video"
+                );
         }
 
         private void radioButton3_CheckedChanged(object sender, EventArgs e)
         {
-            panel4.AllowDrop = false;
-            label7.Text = null;
-            label6.Visible = false;
-
-            comboBox1.SelectedIndex = -1;
-            comboBox2.SelectedIndex = -1;
-            UpdateChooseButtonState();
-
-            selectedRadioButton = "Audio";
-
-            comboBox1.Items.Clear();
-            comboBox1.Items.AddRange(new string[] { "MP3", "AC3" });
-
-            comboBox2.Items.Clear();
-            comboBox2.Items.AddRange(new string[] { "MP3", "AC3" });
+            InitializeFileTypeComboBox(
+                new string[] { "MP3", "AC3" },
+                new string[] { "MP3", "AC3" },
+                "Audio"
+                );
         }
 
         private void comboBox1_SelectionChangeCommitted(object sender, EventArgs e)
@@ -149,7 +135,7 @@ namespace MyConverter
                 comboBox2.Items.Add(tempItem);
             }
 
-            label6.Enabled = true;
+            
 
             button2.Enabled = !string.IsNullOrEmpty(label7.Text) &&
                               comboBox1.SelectedIndex != -1 &&
@@ -159,9 +145,13 @@ namespace MyConverter
 
             comboBox2.Items.Remove(tempItem);
 
-            panel4.AllowDrop = true;
-            button1.Enabled = true;
-            label6.Visible = true;
+            if (comboBox1.SelectedIndex != -1)
+            {
+                label6.Enabled = true;
+                panel4.AllowDrop = true;
+                button1.Enabled = true;
+                label6.Visible = true;
+            }
 
             label7.Text = null;
         }
@@ -175,6 +165,9 @@ namespace MyConverter
 
         private void button1_Click(object sender, EventArgs e)
         {
+            button1.Enabled = false;
+            button1.Enabled = true;
+
             using (OpenFileDialog openFileDialog = new OpenFileDialog())
             {
                 string selectedOriginalFormat = "";
@@ -191,11 +184,11 @@ namespace MyConverter
 
                 if (string.IsNullOrEmpty(label7.Text))
                 {
-                    MessageBox.Show($"Please select a {selectedOriginalFormat} file.");
+                    MessageBox.Show($"Please select a .{selectedOriginalFormat.ToLower()} file.");
                     return;
                 }
 
-                UpdateConvertButtonState();
+                ToggleConvertButtonState();
             }
         }
 
@@ -204,9 +197,13 @@ namespace MyConverter
             var directory = AppContext.BaseDirectory;
             return Path.GetFullPath(Path.Combine(directory, "ffmpeg", "bin"));
         }
+
         private async void button2_Click(object sender, EventArgs e)
         {
-            cancelBtn = false;
+            button2.Enabled = false;
+            button2.Enabled = true;
+
+            isCancelButtonClicked = false;
 
             string ffmpegPath = GetRootPath();
             FFmpeg.SetExecutablesPath(ffmpegPath);
@@ -257,6 +254,11 @@ namespace MyConverter
                                 case "webm":
                                     conversion.SetOutputFormat(Format.webm);
                                     break;
+                                case "wmv":
+                                    conversion.AddParameter("-c:v wmv2")
+                                             .AddParameter("-c:a wmav2")
+                                             .AddParameter("-f asf");
+                                    break;
                                 default:
                                     MessageBox.Show("Unsupported format selected.");
                                     return;
@@ -266,7 +268,9 @@ namespace MyConverter
                             button2.Enabled = false;
                             button3.Enabled = true;
 
+                            RestrictActions();
                             await conversion.Start(cancellationTokenSource.Token);
+                            AllowActions();
                         }
                         else if (radioButton1.Checked)
                         {
@@ -301,7 +305,9 @@ namespace MyConverter
                                 button2.Enabled = false;
                                 button3.Enabled = true;
 
+                                RestrictActions();
                                 await Task.Run(() => image.Write(outputFileName));
+                                AllowActions();
                             }
                         }
 
@@ -315,23 +321,41 @@ namespace MyConverter
                     {
                         MessageBox.Show("An error occurred: " + ex.Message);
                     }
-                    finally
+                    
+                    progressBar1.Visible = false;
+                    Cursor = Cursors.Default;
+                    isConverting = false;
+
+                    button1.Enabled = true;
+                    button2.Enabled = true;
+                    button3.Enabled = false;
+
+                    if (!isCancelButtonClicked && !isFormClosing && File.Exists(outputFileName))
                     {
-                        progressBar1.Visible = false;
-                        Cursor = Cursors.Default;
-                        isConverting = false;
-
-                        button1.Enabled = true;
-                        button2.Enabled = true;
-                        button3.Enabled = false;
-
-                        if (!cancelBtn)
-                        {
-                            MessageBox.Show($"File successfully converted to {selectedConvertFormat}");
-                        }
+                        MessageBox.Show($"File successfully converted to .{selectedConvertFormat} format");
                     }
                 }
             }
+        }
+
+        private void RestrictActions()
+        {
+            comboBox1.Enabled = false;
+            comboBox2.Enabled = false;
+
+            radioButton1.Enabled = false;
+            radioButton2.Enabled = false;
+            radioButton3.Enabled = false;
+        }
+
+        private void AllowActions()
+        {
+            comboBox1.Enabled = true;
+            comboBox2.Enabled = true;
+
+            radioButton1.Enabled = true;
+            radioButton2.Enabled = true;
+            radioButton3.Enabled = true;
         }
 
         private void linkLabel2_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
@@ -380,6 +404,7 @@ namespace MyConverter
                 if (result == DialogResult.Yes)
                 {
                     cancellationTokenSource.Cancel();
+                    AllowActions();
 
                     while (isConverting)
                     {
@@ -417,7 +442,7 @@ namespace MyConverter
             if (isConverting)
             {
                 e.Cancel = true;
-
+                isFormClosing = true;
                 await ConversionCancellingAsync();
 
                 if (!isConverting)
@@ -429,7 +454,10 @@ namespace MyConverter
 
         private async void button3_Click(object sender, EventArgs e)
         {
-            cancelBtn = true;
+            button3.Enabled = false;
+            button3.Enabled = true;
+
+            isCancelButtonClicked = true;
 
             await ConversionCancellingAsync();
         }
@@ -438,9 +466,13 @@ namespace MyConverter
         {
             string[] files = (string[])e.Data.GetData(DataFormats.FileDrop);
 
-            if (files.Length > 0)
+            if (files.Length > 0 && files[0].Contains(comboBox1.Text.ToLower()))
             {
                 label7.Text = files[0];
+            }
+            else
+            {
+                MessageBox.Show($"You chose the wrong format. \nPlease drag .{comboBox1.Text.ToLower()} file here!");
             }
         }
 
